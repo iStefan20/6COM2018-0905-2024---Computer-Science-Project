@@ -1,0 +1,78 @@
+#include <LoRa.h>
+#include <SHA256.h>  
+
+// Secret key for HMAC
+const String SECRET_KEY = "Hnhyjbbsx7ivr0qNzxvcjUU5odCxDXuZYnb/0B9gV7tieLMHPJr4uCBJDFf+kPqv";
+
+SHA256 sha256;  // SHA256 object
+
+void setup() {
+    Serial.begin(9600);
+    while (!Serial);
+
+    // Initialize  LoRa
+    if (!LoRa.begin(868E6)) {  // 868 MHz for Europe
+        Serial.println("LoRa init failed!");
+        while (1);
+    }
+    LoRa.setSyncWord(0xF3);  // Set custom sync word
+    Serial.println("LoRa gateway ready!");
+}
+
+void loop() {
+    // Check for incoming packets
+    int packetSize = LoRa.parsePacket();
+    if (packetSize) {
+        String receivedData = "";
+        while (LoRa.available()) {
+            receivedData += (char)LoRa.read();
+        }
+
+        // Find the last comma in the received data
+        int lastCommaIndex = receivedData.lastIndexOf(',');
+
+        if (lastCommaIndex != -1) {
+            // Extract data (everything before the last comma)
+            String data = receivedData.substring(0, lastCommaIndex);
+
+            // Extract HMAC (everything after the last comma)
+            String receivedHMAC = receivedData.substring(lastCommaIndex + 1);
+
+            // Verify HMAC
+            String expectedHMAC = generateHMAC(data);
+            Serial.println("Received Data: " + data);
+            Serial.println("Received HMAC: " + receivedHMAC);
+            Serial.println("Expected HMAC: " + expectedHMAC);
+
+            if (receivedHMAC == expectedHMAC) {
+                // Process the data
+                Serial.println("Received valid data: " + data);
+            } else {
+                Serial.println("Invalid HMAC! Packet rejected.");
+            }
+        } else {
+            Serial.println("Invalid packet format! Missing comma.");
+        }
+    }
+}
+
+String generateHMAC(String data) {
+    // Combine data with secret key
+    String input = SECRET_KEY + data;
+
+    // Generate SHA256 hash
+    sha256.reset();
+    sha256.update(input.c_str(), input.length());
+    uint8_t hash[32];
+    sha256.finalize(hash, 32);
+
+    // Convert hash to a hex string
+    String hmac = "";
+    for (int i = 0; i < 32; i++) {
+        char buffer[3];
+        sprintf(buffer, "%02x", hash[i]);
+        hmac += buffer;
+    }
+
+    return hmac;
+}
