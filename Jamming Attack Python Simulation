@@ -1,0 +1,119 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
+from matplotlib.widgets import Button
+
+# Creating the environment
+np.random.seed(42)
+num_nodes = 10
+area_size = 100
+jammer_range = 40
+packet_speed = 1
+
+# Positions of nodes, base station, and jammer
+node_positions = np.random.rand(num_nodes, 2) * area_size
+base_station_position = np.array([3 * area_size / 4, 3 * area_size / 4])  # Base station outside jammer's range
+jammer_position = np.array([area_size / 4, area_size / 4])
+
+# State variables
+is_jamming_active = False
+packet_progress = np.zeros(num_nodes)  # Track progress of packets along the link
+
+# Packet data 
+packets = [{"node_id": i, "payload": f"Data from Node {i}", "status": "unsent"} for i in range(num_nodes)]
+
+# Plot Setup
+fig, ax = plt.subplots()
+plt.subplots_adjust(bottom=0.2)
+ax.set_xlim(0, area_size)
+ax.set_ylim(0, area_size)
+ax.set_title("LoRaWAN Jamming Attack")
+
+# Drawing nodes, base station, and jammer
+node_scatter = ax.scatter(node_positions[:, 0], node_positions[:, 1], c="blue", label="Nodes")
+base_station_scatter = ax.scatter(base_station_position[0], base_station_position[1], c="green", s=100, label="Base Station")
+jammer_scatter = ax.scatter(jammer_position[0], jammer_position[1], c="red", s=100, label="Jammer")
+
+# Circle for jammer range
+jammer_circle = plt.Circle(jammer_position, jammer_range, color="red", alpha=0.2)
+ax.add_artist(jammer_circle)
+
+# Lines connecting nodes to the base station
+lines = [ax.plot([], [], "gray", linestyle="--")[0] for _ in range(num_nodes)]
+
+# Packet scatter plot
+packet_scatter = ax.scatter([], [], c="orange", label="Packets")
+
+# Toggle Button for Jamming
+ax_button = plt.axes([0.4, 0.05, 0.2, 0.075])
+button = Button(ax_button, "Toggle Jamming")
+
+
+def toggle_jamming(event):
+    global is_jamming_active
+    is_jamming_active = not is_jamming_active
+    jammer_circle.set_alpha(0.2 if is_jamming_active else 0)
+    print("Jamming Active" if is_jamming_active else "Jamming Inactive")
+
+
+button.on_clicked(toggle_jamming)
+
+
+# Animation Update Function
+def update(frame):
+    global packet_progress
+
+    node_labels = []
+    for i, position in enumerate(node_positions):
+        label = ax.text(position[0] + 2, position[1] + 2, str(i), color="black", fontsize=8)
+        node_labels.append(label)
+
+
+    packet_data = []  # Data for packets
+    node_colors = []  # Dynamic node colour updates
+    for i, position in enumerate(node_positions):
+        # Update the line connecting the node to the base station
+        lines[i].set_data([position[0], base_station_position[0]],
+                          [position[1], base_station_position[1]])
+
+        # Check if the node is jammed
+        distance_to_jammer = np.linalg.norm(position - jammer_position)
+        if is_jamming_active and distance_to_jammer <= jammer_range:
+            # Node is jammed; no packets are sent
+            packets[i]["status"] = "jammed"
+            node_colors.append("red")  # Jammed nodes are displayed in red
+            continue
+
+        # Node is not jammed; send packets
+        packets[i]["status"] = "sent"
+        node_colors.append("blue")  # Active nodes remain blue
+        packet_progress[i] += packet_speed / np.linalg.norm(base_station_position - position)
+        if packet_progress[i] >= 1.0:
+            packet_progress[i] = 0  # Reset packet once it reaches the base station
+            print(f"Packet received: {packets[i]}")  # Only print if packet reaches the base station
+
+        # Calculate current packet position
+        current_packet_position = (1 - packet_progress[i]) * position + packet_progress[i] * base_station_position
+        packet_data.append(current_packet_position)
+
+    # Update the packet scatter plot
+    if packet_data:
+        packet_scatter.set_offsets(packet_data)
+    else:
+        packet_scatter.set_offsets([])
+
+    # Update node colours to reflect jamming status
+    node_scatter.set_color(node_colors)
+
+    # Print jammed node status
+    if is_jamming_active:
+        jammed_nodes = [packet for packet in packets if packet["status"] == "jammed"]
+        print(f"Jammed nodes: {jammed_nodes}")
+
+    return lines + [packet_scatter, node_scatter]
+
+
+# Run Animation
+ani = FuncAnimation(fig, update, frames=100, interval=200, blit=True)
+plt.legend()
+plt.show()
