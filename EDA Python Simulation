@@ -1,0 +1,155 @@
+import matplotlib.pyplot as plt
+import numpy as np
+import tkinter as tk
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import random
+
+# The number of nodes and the battery levels
+num_nodes = 6
+battery_levels = [100 for _ in range(num_nodes)]  # Display battery levels for the nodes
+
+# Positions for nodes, server, and gateway
+nodes_positions = [(random.randint(1, 30), random.randint(1, 30)) for _ in range(num_nodes)]
+server_position = (15, 15)  
+gateway_position = (30, 30)  
+
+# Packet positions for animation
+packet_positions = {i: None for i in range(num_nodes)}  # Store packet positions for each node
+sending_packets = {i: False for i in range(num_nodes)}  # Whether packet is being sent to a node
+forwarded_positions = {i: None for i in range(num_nodes)}  # Store forwarded packet positions
+forwarding_packets = {i: False for i in range(num_nodes)}  # Whether a packet is being forwarded to the gateway
+
+# Create the plot and update it
+def update_plot():
+    ax.clear()
+
+    # Plot the server (red)
+    ax.scatter(*server_position, color='red', s=100, label="Attacker")
+
+    # Plot the gateway (violet)
+    ax.scatter(*gateway_position, color='purple', s=100, label="Gateway")
+
+    # Plot nodes (blue) with the battery level
+    for i, (node_position, battery) in enumerate(zip(nodes_positions, battery_levels)):
+        if battery > 0:  # Only show active nodes
+            ax.scatter(*node_position, color='blue', s=100, label=f"Node {i+1}")
+            ax.text(node_position[0], node_position[1] + 0.5, f'{battery:.1f}%', ha='center', fontsize=9, color='black')
+
+            # Animate packets (yellow) moving from server to node
+            if packet_positions[i]:
+                ax.scatter(*packet_positions[i], color='yellow', s=50)  # Show packet as yellow dot
+                ax.plot([server_position[0], packet_positions[i][0]], 
+                        [server_position[1], packet_positions[i][1]], color='orange', linestyle='--', alpha=0.5)
+
+            # Animate forwarded packets (cyan) from node to gateway
+            if forwarded_positions[i]:
+                ax.scatter(*forwarded_positions[i], color='cyan', s=50)  # Forwarded packet as cyan dot
+                ax.plot([nodes_positions[i][0], forwarded_positions[i][0]], 
+                        [nodes_positions[i][1], forwarded_positions[i][1]], color='cyan', linestyle='--', alpha=0.5)
+
+    ax.set_xlim(0, 40)
+    ax.set_ylim(0, 40)
+    ax.set_title("Battery Depletion Attack with Packet Forwarding")
+    ax.set_xlabel("X Position")
+    ax.set_ylabel("Y Position")
+    
+    # Legend    
+    ax.legend(loc='upper left')
+
+    canvas.draw()
+
+# Function to toggle the battery depletion attack
+def toggle_attack():
+    global attack_active
+    attack_active = not attack_active
+    if attack_active:
+        attack_button.config(text="Stop Attack")
+        start_attack()
+    else:
+        attack_button.config(text="Start Attack")
+        stop_attack()
+
+# Simulation of the battery depletion attack and packet transmission
+def start_attack():
+    global battery_levels, packet_positions, sending_packets, forwarded_positions, forwarding_packets
+
+    for i in range(num_nodes):
+        if battery_levels[i] > 0:
+            # Start sending packet 
+            if packet_positions[i] is None and not sending_packets[i]:
+                packet_positions[i] = server_position  # Start packet at server
+                sending_packets[i] = True  
+
+            # Move packet toward the node
+            if sending_packets[i]:
+                packet_positions[i] = (
+                    packet_positions[i][0] + (nodes_positions[i][0] - packet_positions[i][0]) * 0.05,
+                    packet_positions[i][1] + (nodes_positions[i][1] - packet_positions[i][1]) * 0.05
+                )
+
+            # Once the packet reaches the node, deplete battery and forward packet
+            if np.linalg.norm(np.array(packet_positions[i]) - np.array(nodes_positions[i])) < 0.1:
+                battery_levels[i] -= 0.5
+                if battery_levels[i] < 0:
+                    battery_levels[i] = 0
+                packet_positions[i] = None  
+                sending_packets[i] = False  
+
+                # Start forwarding packet to the gateway
+                forwarded_positions[i] = nodes_positions[i]  
+                forwarding_packets[i] = True  
+
+        # Move packet towards the gateway
+        if forwarding_packets[i]:
+            forwarded_positions[i] = (
+                forwarded_positions[i][0] + (gateway_position[0] - forwarded_positions[i][0]) * 0.05,
+                forwarded_positions[i][1] + (gateway_position[1] - forwarded_positions[i][1]) * 0.05
+            )
+
+        # Once the forwarded packet reaches the gateway, remove it
+        if forwarded_positions[i] and np.linalg.norm(np.array(forwarded_positions[i]) - np.array(gateway_position)) < 0.1:
+            forwarded_positions[i] = None
+            forwarding_packets[i] = False  
+
+    update_plot()
+    if attack_active:
+        root.after(100, start_attack)
+
+# Simulate continuous battery depletion in the background
+def continuous_battery_depletion():
+    global battery_levels
+    for i in range(num_nodes):
+        if battery_levels[i] > 0:
+            battery_levels[i] -= 0.01
+            if battery_levels[i] < 0:
+                battery_levels[i] = 0
+    update_plot()
+    root.after(1000, continuous_battery_depletion)
+
+# Stop the attack
+def stop_attack():
+    global sending_packets, packet_positions, forwarded_positions, forwarding_packets
+    sending_packets = {i: False for i in range(num_nodes)}
+    packet_positions = {i: None for i in range(num_nodes)}
+    forwarding_packets = {i: False for i in range(num_nodes)}
+    forwarded_positions = {i: None for i in range(num_nodes)}
+    update_plot()
+
+# tkinter window and button
+root = tk.Tk()
+root.title("Battery Depletion Attack with Gateway Forwarding")
+root.geometry("1000x800")
+
+fig, ax = plt.subplots(figsize=(10, 8))
+
+canvas = FigureCanvasTkAgg(fig, master=root)
+canvas.get_tk_widget().pack()
+
+attack_button = tk.Button(root, text="Start Attack", command=toggle_attack)
+attack_button.pack()
+
+attack_active = False
+
+update_plot()
+continuous_battery_depletion()
+root.mainloop()
