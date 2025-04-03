@@ -1,0 +1,71 @@
+#include <LoRa.h>
+#include <Adafruit_AHTX0.h>  // For temperature sensor
+#include <SHA256.h>  // SHA256 library 
+
+Adafruit_AHTX0 dht;  // DHT sensor object
+
+// Secret key for HMAC
+const String SECRET_KEY = "Hnhyjbbsx7ivr0qNzxvcjUU5odCxDXuZYnb/0B9gV7tieLMHPJr4uCBJDFf+kPqv";
+
+SHA256 sha256;  // SHA256 object
+
+void setup() {
+    Serial.begin(9600);
+    while (!Serial);
+
+    // Initialize DHT sensor
+    if (!dht.begin()) {
+        Serial.println("Failed to initialize AHT sensor!");
+        while (1);
+    }
+
+    // Initialize LoRa
+    if (!LoRa.begin(868E6)) {  // 868 MHz for Europe
+        Serial.println("LoRa init failed!");
+        while (1);
+    }
+    LoRa.setSyncWord(0xF3);  // Set custom sync word
+    Serial.println("LoRa sender ready!");
+}
+
+void loop() {
+    // Read temperature and humidity
+    sensors_event_t humidity, temp;
+    dht.getEvent(&humidity, &temp);
+
+    // Prepare data string
+    String data = "Temperature:" + String(temp.temperature) + ",Humidity:" + String(humidity.relative_humidity);
+
+    // Generate HMAC
+    String hmac = generateHMAC(data);
+
+    // Send data and HMAC
+    LoRa.beginPacket();
+    LoRa.print(data + "," + hmac);  
+    LoRa.endPacket();
+
+    Serial.println("Data sent: " + data);
+    Serial.println("Sender HMAC: " + hmac);
+    delay(10000);  // Send every 10 seconds
+}
+
+String generateHMAC(String data) {
+    // Combine data with secret key
+    String input = SECRET_KEY + data;
+
+    // Generate SHA256 hash
+    sha256.reset();
+    sha256.update(input.c_str(), input.length());
+    uint8_t hash[32];
+    sha256.finalize(hash, 32);
+
+    // Convert hash to a hex string
+    String hmac = "";
+    for (int i = 0; i < 32; i++) {
+        char buffer[3];
+        sprintf(buffer, "%02x", hash[i]);
+        hmac += buffer;
+    }
+
+    return hmac;
+}
