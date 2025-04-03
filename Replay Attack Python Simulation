@@ -1,0 +1,111 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
+import random
+
+# Define positions of sender, attacker, and gateway
+sender_pos = np.array([2, 5], dtype=float)    
+attacker_pos = np.array([5, 2], dtype=float)   
+gateway_pos = np.array([10, 5], dtype=float)  
+
+# Initialise variables
+frame_counter = 1               # Increments with each transmission
+captured_packets = []           # Stores intercepted frame counters
+attack_success = False          # Tracks if replay attack succeeds
+packet_speed = 0.05             # Speed of packet movement
+interception_success = False    # Tracks if interception happened
+replay_active = False           # Controls replay packet visibility
+
+# Setup 
+fig, ax = plt.subplots(figsize=(8, 6))
+ax.set_xlim(0, 12)
+ax.set_ylim(0, 7)
+ax.set_title("LoRaWAN Replay Attack Simulation")
+
+# Plot sender, attacker, and gateway
+ax.scatter(*sender_pos, color="blue", label="Sender Node", s=100)
+ax.scatter(*attacker_pos, color="red", label="Attacker", s=100)
+ax.scatter(*gateway_pos, color="green", label="Gateway", s=100)
+
+# Transmission paths 
+sender_to_gateway_line, = ax.plot([], [], "gray", linestyle="--")
+attacker_to_gateway_line, = ax.plot([], [], "red", linestyle="--")
+
+# Packets 
+legit_packet, = ax.plot([], [], "bo", markersize=10, label="Legitimate Packet")
+replay_packet, = ax.plot([], [], "ro", markersize=10, label="Replayed Packet")
+
+# Attack status message
+attack_status = ax.text(6, 6.5, "Monitoring...", fontsize=12, ha="center", color="black")
+
+# Initialise packet positions
+legit_packet_pos = sender_pos.copy().astype(float)
+replay_packet_pos = attacker_pos.copy().astype(float)
+
+def intercept_packet():
+    """Simulates attacker capturing a transmitted packet (60% chance)."""
+    global interception_success
+    if random.random() > 0.6:  # 60% interception probability
+        captured_packets.append(frame_counter)
+        interception_success = True
+        print(f"Attacker intercepted packet (Frame Counter: {frame_counter})")
+    else:
+        interception_success = False
+
+def analyse_packet():
+    """Simulates attacker analysing the intercepted packet."""
+    if interception_success:
+        print(f"Attacker analysing packet (Frame Counter: {captured_packets[-1]})")
+
+def replay_attack():
+    """Simulates replay attack (gateway rejects old frame counters)."""
+    global attack_success, replay_active
+    if captured_packets:
+        replayed_frame = random.choice(captured_packets)
+        print(f"Attacker replays packet (Frame Counter: {replayed_frame})")
+        # Realistic behavior: Gateway rejects if frame counter is old
+        attack_success = (replayed_frame >= frame_counter)  # Attack succeeds only if counter is current or future (unlikely)
+        replay_active = True
+
+# Animation update function
+def update(frame):
+    global frame_counter, legit_packet_pos, replay_packet_pos, replay_active, attack_success
+    
+    # Move legitimate packet
+    legit_packet_pos += (gateway_pos - sender_pos) * packet_speed
+    if np.linalg.norm(legit_packet_pos - gateway_pos) < 0.2:  # Reset at gateway
+        frame_counter += 1
+        legit_packet_pos = sender_pos.copy().astype(float)
+        intercept_packet()
+        analyse_packet()
+        replay_attack()
+
+    # Move replay packet (if active)
+    if replay_active:
+        replay_packet_pos += (gateway_pos - attacker_pos) * packet_speed
+        if np.linalg.norm(replay_packet_pos - gateway_pos) < 0.2:  # Reset at gateway
+            replay_packet_pos = attacker_pos.copy().astype(float)
+            replay_active = False
+
+    # Update packet positions
+    legit_packet.set_data([legit_packet_pos[0]], [legit_packet_pos[1]])
+    replay_packet.set_data([replay_packet_pos[0]], [replay_packet_pos[1]]) if replay_active else replay_packet.set_data([], [])
+
+    # Update transmission paths
+    sender_to_gateway_line.set_data([sender_pos[0], gateway_pos[0]], [sender_pos[1], gateway_pos[1]])
+    attacker_to_gateway_line.set_data([attacker_pos[0], gateway_pos[0]], [attacker_pos[1], gateway_pos[1]])
+
+    # Update attack status message
+    if replay_active:
+        attack_status.set_text("Replay Attack Succeeded!" if attack_success else "Replay Attack Blocked!")
+        attack_status.set_color("red" if attack_success else "green")
+    else:
+        attack_status.set_text("Monitoring...")
+        attack_status.set_color("black")
+
+    return legit_packet, replay_packet, sender_to_gateway_line, attacker_to_gateway_line, attack_status
+
+# Run animation
+ani = FuncAnimation(fig, update, frames=100, interval=100, repeat=True)
+plt.legend()
+plt.show()
