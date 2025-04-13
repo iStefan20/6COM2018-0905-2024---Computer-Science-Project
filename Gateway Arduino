@@ -2,7 +2,7 @@
 #include <SHA256.h>  
 
 // Secret key for HMAC
-const String SECRET_KEY = "Hnhyjbbsx7ivr0qNzxvcjUU5odCxDXuZYnb/0B9gV7tieLMHPJr4uCBJDFf+kPqv";
+const String SECRET_KEY = "";
 
 SHA256 sha256;  // SHA256 object
 
